@@ -1,0 +1,304 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Untitled Document</title>
+    <script src="https://d3js.org/d3.v3.min.js"></script>
+    <style>
+        body {
+            background: #eee;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: black;
+            /*線條顏色*/
+            shape-rendering: auto;
+            /*讓線很細，比較像座標軸*/
+        }
+
+        .axis text {
+            font-size: 11px;
+            fill: blue;
+        }
+        /* 提示框 */
+        #tooltip{
+            position: absolute;
+            /* left: 20px; */
+            /* top:  100px; */
+            background: #fff;
+            width: 150px;
+            height: auto;
+            padding: 0px 10px;
+            border-radius: 5px;
+            box-shadow: 5px 5px 10px rgba(0,0,0,0.3);
+        }
+        #tooltip.hidden{
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 提示框 -->
+    <div id="tooltip" class="hidden">
+        <p><strong id="city">Hello</strong></p>
+        <p id="industry">tooltip</p>
+    </div>
+
+    <!-- 播放按鈕 -->
+    <input type="button" value="PLAY" id="timer">
+
+    <script>
+        // 1. 定義width, height, padding, letterList變數
+        var w = 900;
+        var h = 600;
+        var padding = 60;
+        var letterList = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "M", "N", "O", "P", "Q", "T", "U", "V", "W", "X", "Z"];
+
+        //2. 建立svg()畫布環境
+
+        svg();
+
+        //3. 用d3讀取csv，會先做mid，再做後續的function
+        d3.csv("cancer_data.csv", mid, function (dataSet) {
+
+            //    console.table(dataSet)
+            bind(dataSet);
+            render(dataSet);
+            btnList(dataSet);
+
+        });
+
+        // 轉換格式
+        function mid(d) {
+            d.incidence = +d.incidence;
+            d.count = +d.count;
+            d.avg_age = +d.avg_age;
+            d.crude_rate = +d.crude_rate;
+            return d
+        }
+
+        function svg() {
+            d3.select("body").append("svg").attr({
+                width: w,
+                height: h
+            });
+            d3.select("svg").append("g").append("rect").attr({
+                width: "100%",
+                height: "100%",
+                fill: "white"
+            });
+            // 繪x座標軸
+            d3.select("svg")
+                .append("g")
+                .classed("axis", true)
+                .attr("id", "axisX");
+
+            // 繪y座標軸
+            d3.select("svg")
+                .append("g")
+                .classed("axis", true)
+                .attr("id", "axisY")
+        }
+
+        //4. 建立bind()
+
+        function bind(dataSet) {
+            var selection = d3.select("svg")
+                .selectAll("circle")
+                .data(dataSet);
+
+            selection.enter().append("circle");
+            selection.exit().remove();
+        }
+
+        function render(dataSet) {
+
+            //5. 定義xScale,yScale,rScale, fScale比例尺(range目的在決定在svg上位置)
+
+            var xScale = d3.time.scale()
+                .domain([
+                    0,
+                    d3.max(dataSet, function (d) {
+                        return d.crude_rate;
+                    })
+                ])
+                .range([padding, w - padding]);
+            var yScale = d3.scale.linear()
+                .domain([0, d3.max(dataSet, function (d) {
+                    return d.avg_age;
+                })])
+                .range([h - padding, padding]);
+            var rScale = d3.scale.linear()
+                .domain([d3.min(dataSet, function (d) {
+                    return d.count;
+                }), d3.max(dataSet, function (d) {
+                    return d.count;
+                })])
+                .range([5, 10]);
+            var fScale = d3.scale.category20();
+
+            // x座標軸
+            var xAxis = d3.svg.axis()
+                .scale(xScale)
+                .orient("bottom")
+                .ticks(12);
+
+            // y座標軸
+            var yAxis = d3.svg.axis()
+                .scale(yScale)
+                .orient("left")
+
+            //6. 建立render()繪圖
+            d3.selectAll("circle")
+                .transition()  //加動畫
+                .attr({
+                    cx: function (d) {
+                        return xScale(d.crude_rate);
+                    },
+                    cy: function (d) {
+                        return yScale(d.avg_age);
+                    },
+                    r: function (d) {
+                        return rScale(d.count);
+                    },
+                    fill: function (d) {
+                        return fScale(d.city);
+                    }
+                });
+            
+            // html原始就有提示框的功能->title
+            // d3.selectAll("circle").append("title").text(function(d){  
+            //         return d.city+"\r\n"+d.industry+"\r\n"+d.amount;
+            //     });
+
+            //自製提示框
+            d3.selectAll("circle")
+                .on("mouseover",function(d){
+                var posX = d3.select(this).attr("cx");
+                var posY = d3.select(this).attr("cy");
+
+                var tooltip = d3.select("#tooltip")
+                                .style({
+                                    "left": (+posX+20)+"px",
+                                    "top": (+posY+20)+"px"
+                                })
+                
+                tooltip.select("#city").text(d.city);
+                tooltip.select("#industry").html(d.category+"<br>案例數:"+d.incidence);
+                tooltip.classed("hidden", false);
+                })
+                .on("mouseout", function(d){
+                    d3.select("#tooltip").classed("hidden", true);
+                })
+
+            // 繪x座標軸
+            d3.select("svg>#axisX")
+                .attr("transform", "translate(0," + (h - padding + 20) + ")")
+                .call(xAxis);
+
+            // 繪y座標軸
+            d3.select("svg>#axisY")
+                .attr("transform", "translate(" + (padding - 40) + ",0)")
+                .call(yAxis);
+
+
+        }
+
+        //不重複
+        function unique(array) {
+            var n = [];
+            for (var i = 0; i < array.length; i++) {
+                if (n.indexOf(array[i]) == -1) {
+                    n.push(array[i]);
+                }
+            }
+            return n;
+        }
+
+        //用來繪底下的按鈕
+        function btnList(dataSet) {
+            var catArr = dataSet.map(function (d) {
+                return d.category;
+            });
+            var ucatArr = unique(catArr);
+
+            //去除掉資料不乾淨的""情況
+            var fcatArr = ucatArr.filter(function (d) {
+                return d != "";
+            });
+
+            //select part1--------------------------------
+            var selection = d3.select("body")
+                .append("select")
+                .selectAll("option")
+                .data(ucatArr);
+
+            selection.enter().append("option")
+                .attr({
+                    "value": function (d) {
+                        return d
+                    }
+                }).text(function (d) {
+                    return d
+                })
+            selection.exit().remove();
+
+            //select part2--------------------------------
+            d3.select("select").on("change", function () {
+                var value = d3.select("select").property("value");  //property:像是表單等等動態的元素屬性，與attr類似
+                var newDataSet = dataSet.filter(function (d) {
+                    return d.category === value;
+                })
+                update(newDataSet);
+            })
+
+            //每次按下都要更新圖表，重新bind、render，留下按下的資料而已
+            function update(newDataSet) {
+                bind(newDataSet)
+                render(newDataSet)
+            }
+
+            d3.select("#timer").on("click", function(d){
+
+                var dateArr = unique(dataSet.map(function(d){
+                    return d.date;
+                }));
+                var idx = 0;
+
+                d3.select("svg").append("text").attr({
+                    "id": "showYear",
+                    "x": w-padding-400,
+                    "y": h-padding,
+                    "fill": "black",
+                    "opacity": .2,
+                    "font-size": 200
+                })
+
+                window.setInterval(function(){
+                    //更新圖表內容
+                    var value = d3.select("select").property("value");
+                    var newDataSet = dataSet.filter(function(d){
+                        return d.category === value && d.date === dateArr[idx];
+                    })
+
+                    update(newDataSet);
+
+                    d3.select("#showYear").text(dateArr[idx]);
+                    idx++;
+                    if(idx>=dateArr.length){
+                        idx=0;
+                    }
+
+                }, 1000);
+            })
+            // d3.select('body').append("span").text(fIndustryArr);
+        }
+    </script>
+
+</body>
+
+</html>
